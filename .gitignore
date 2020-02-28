@@ -16,7 +16,6 @@ TaskB/entryother
 TaskB/initcode
 TaskB/initcode.out
 TaskB/kernelmemfs
-TaskB/mkfs
 TaskB/kernel/kernel
 TaskB/ser/usys.S
 TaskB/.gdbinit
