@@ -60,8 +60,10 @@ $
 + If you use the simple thread API, then you should apply the best practice of designing shared objects described in the OSPP textbook. 
 The textbook covers all the APIs for the thread, lock, and condition variable that you will need for this task.   
 
-+ If you use the start code we provide, you will see some unusual 
-treatment: the ThreadPool constructor (ThreadPool.cc:9) 
++ We have provide a starter code in `ThreadPool.cc` and `ThreadPool.h`. We also provided a `tpooltest.cc` for 
+an example server program.
+
++ In `ThreadPool.h`, you will see some unusual treatment: the `ThreadPool` constructor (ThreadPool.cc:9) 
 passes an external function `executor()` and a pointer to itself (i.e., `this`) 
 to `thread_create_p()` and then `executor` calls the `thread_work()` method 
 of the ThreadPool object pointed by the pointer parameter passed into the `executor()` 
