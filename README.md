@@ -1,200 +1,133 @@
-# CPSC/ECE 3200: Introduction to Operating System - Project #3
+# CPSC/ECE 3200: Introduction to Operating System - Project #4
 
-In this project, you will work on two programs that help you (1) to be familiar with the concepts 
-of threads, synchronization, and multi-threaded programming design patterns; 
-(2) to understand how user level thread scheduling works; and 
-(3) to gain hand-on experience on writing multi-threading programs.
+This project consists of two task A. Task A helps you to understand the typical scheduling algorithms and their implementation. Task B helps you to be familiar with page allocation and memory management. 
 
-# Task A: Thread Pool (60 Points)
+# Task A: Job Scheduling Simulator (50 Points)
 
-<code>Implement a Thread Pool library that can be used by a multi-threaded server program. The library shall work on a Linux machine in the School of Computing computer labs. </code>
+<code>Implement a scheduler simulator for Round Robin and MLFQ schedulers.</code>
 
 ## Overview
+In this task, you implement a scheduler simulator `jssim` to support two schedulers: Round Robin and MLFQ. The usage of jssim is as follows:
 
-Today, most server programs are written as multi-threaded programs. 
-Among these programs, thread pool is a widely used design pattern that solves two issues
- existed in naive programs. that creates a separate thread for each request. First, creating a threads takes time and it is a waste when the thread will be discarded once it has completed its work. Second, because the number of requests at any time point is unpredictable, if we don't place a bound on the number of concurrent threads, a large number of threads could exhaust system resources like CPU time or memory. 
+```
+	./jssim -p [policy] -q [list-of-quantums] -w [workload]
+```
+Here, 
 
-The general idea behind a thread pool is to create a number of threads at start-up and then place them into a pool, where they sit and wait for work. When a server receives a request, rather than creating a thread, it instead submits the request to the thread pool and resumes waiting for additional requests. If there is an available thread in the pool, it is awakened, and the request is serviced immediately. If the pool contains no available thread, the task is queued until one becomes free. Once a thread completes its service, it returns to the pool and awaits more work. 
++ policy is `fifo`, `rr`, `srtf`, or `mlfq`.
++ workload is the filename for a workload formatted as follows:
+	```
+	#ID,Arrival,Service
+	1   0   2
+	2   5   1
+	3   8   7
+	```
++ list-of-quantums is one or more integers for the time quantum(s) for Round Robin or MLFQ scheduler.
 
-In this task, you will implement a thread pool library that can be used by some server programs. A server program submits its tasks to the thread pool and the threads in the thread pool fetch tasks and do the work. We provide an example server program called `tptest` and a starter code for you to get started. The starter code uses the simple thread API developed by the authors of the OSPP textbook. However, you are free to use other thread libraries like `pthread` if you are comfortable to do so.  
+Example usages are like follows:
+
+```
+	make
+	./jssim -p fifo -w data/w1
+	./jssim -p rr -q 2 -w data/w1
+	./jssim -p mlfq -q 2 4 -w data/w1
+	./jssim -p srtf -w data/w1	
+```
+
+For you to focus on the scheduler implementation, we have provided a simulator framework as well as an implementation of FIFO and SRTF (Shortest Remaining Time First) scheduler. 
+You can either use the provided framework in your implementation or write your own implementation from scratch. 
+
+The point distribution is as follows:
+
++ Round Robin: 20 points
++ MLFQ: 30 points
 
 ## Specification
 
-1. You provide a thread pool library that implements a ThreadPool class which has at least three APIs:
+1. At minimum, your simulator should take a workload file <input> and write the scheduling results into a text file named <input>-<policy>.result. The scheduling results is formatted as follows:
+	```
+	#ID,Arrival,Service,Departure,Response,Wait
+	1 0 13 33 33 20
+	2 2 8 22 20 12
+	3 2 12 32 30 18
+	```
+1. For the MLFQ scheduler, use two queues: one high-priority queue for interactive tasks and one low-priority queue for CPU-bound tasks, each serviced in a round-robin fashion.
+   a. Each task begins in a high-priority queue; if its quantum expires before its CPU burst ends, it is demoted to the low-priority queue.
+   b. A new arriving task preempts a running low-priority task because it has a higher priority. It does not preempt a running high-priority task. 
 
-   a. `ThreadPool(unsigned int numThreads)` creates a pool of numThreads.
-   
-   b.  `int submit(void (*somFunction)(void *), void *p)` submits a task to the pool, where `somFunction` is 
-   a pointer to the function that a thread from he pool will execute and ps is parameter passed to the function.
-   
-   c.  `shutdown()` that shutdown the pools. 
-1. Invoking the command `make` shall create a executable binary `tpooltest`, which can be used to test your thread pool implementation. 
+## Hints
 
-### Example Output
-Your program shall generate output like the following example except that the order of the output may be different. 
++ Implement Round Robin scheduler first and then work on the MLFQ scheduler.
++ Keep track of the current simulation time and all scheduling events. Implement appropriate scheduling action for every scheduling event.
++ If your program is based on the starter code we have provided, study the FIFO and SRTFScheduler implementation and then use it as a reference when you implement other schedulers. 
++ Design some simple test cases to test if your schedulers behave correctly.
++ Use the provided sample output as a base to validate your implementation. 
+
+# Task B: Copy-on-Write Fork for xv6 (50 Points)
+<code> Your task is to implement copy-on-write fork in the xv6 kernel. You are done if your modified kernel executes both the cowtest and usertests programs successfully. </code>
+
+## The problem
+
+The `fork()` system call in xv6 copies all of the parent process's user-space memory into the child. If the parent is large, copying can take a long time. In addition, the copies often waste memory; in many cases neither the parent nor the child modifies a page, so that in principle they could share the same physical memory. The inefficiency is particularly clear if the child calls `exec()`, since `exec()` will throw away the copied pages, probably without using most of them. On the other hand, if both parent and child use a page, and one or both writes it, a copy is truly needed. 
+
+## The solution
+
+The goal of copy-on-write (COW) fork() is to defer allocating and copying physical memory pages for the child until the copies are actually needed, if ever.
+
+`COW fork()` creates just a pagetable for the child, with PTEs (page table entries) for user memory pointing to the parent's physical pages. COW fork() marks all the user PTEs in both parent and child as not writable. When either process tries to write one of these COW pages, the CPU will force a page fault. The kernel page-fault handler detects this case, allocates a page of physical memory for the faulting process, copies the original page into the new page, and modifies the relevant PTE in the faulting process to refer to the new page, this time with the PTE marked writeable. When the page fault handler returns, the user process will be able to write its copy of the page.
+
+`COW fork()` makes freeing of the physical pages that implement user memory a little trickier. A given physical page may be referred to by multiple processes' page tables, and should be freed only when the last reference disappears. 
+
+## The cowtest program
+
+To help you test your implementation, we've provided an xv6 program called cowtest (source in user/cowtest.c). cowtest runs various tests, but even the first will fail on unmodified xv6. Thus, initially, you will see: 
+
 ```
-$ make
-g++ -c  -g -Wall -Werror -D_POSIX_THREAD_SEMANTICS tpooltest.cc -o tpooltest.o
-g++ -c  -g -Wall -Werror -D_POSIX_THREAD_SEMANTICS ThreadPool.cc -o ThreadPool.o
-g++ -c  -g -Wall -Werror -D_POSIX_THREAD_SEMANTICS Lock.cc -o Lock.o
-g++ -c  -g -Wall -Werror -D_POSIX_THREAD_SEMANTICS CV.cc -o CV.o
-gcc -c  -g -Wall -Werror -D_POSIX_THREAD_SEMANTICS thread.c -o thread.o
-g++  -g -Wall -Werror -D_POSIX_THREAD_SEMANTICS tpooltest.o ThreadPool.o Lock.o CV.o thread.o -lpthread -o tpooltest
-$ ./tpooltest 3 0 5
-sum of 1 ... 1 = 1
-sum of 1 ... 4 = 10
-sum of 1 ... 5 = 15
-sum of 1 ... 2 = 3
-sum of 1 ... 3 = 6
-sum of 3 ... 9 = 42
-sum of 6 ... 8 = 21
-sum of 9 ... 10 = 19
-sum of 7 ... 12 = 57
-sum of 3 ... 8 = 33
+$ cowtest
+simple: fork() failed
+$ 
+```
+
+The "simple" test allocates more than half of available physical memory, and then fork()s. The fork fails because there is not enough free physical memory to give the child a complete copy of the parent.
+
+When you are done, your kernel should be able to run both cowtest and usertests. That is:
+
+```
+$ cowtest
+simple: ok
+simple: ok
+three: zombie!
+ok
+three: zombie!
+ok
+three: zombie!
+ok
+file: ok
+ALL COW TESTS PASSED
+$ usertests
+...
+ALL TESTS PASSED
 $
 ```
 
 ## Hints
+See the Chapter 3 of the xv6 book, the homework and to leture as well to get familiar with xv6 kernel code that's relevent for copy-on-write.
 
-+ If you use the simple thread API, then you should apply the best practice of designing shared objects described in the OSPP textbook. 
-The textbook covers all the APIs for the thread, lock, and condition variable that you will need for this task.   
+Here's one reasonable plan of attack. 
 
-+ We have provide a starter code in `ThreadPool.cc` and `ThreadPool.h`. We also provided a `tpooltest.cc` for 
-an example server program.
++ Modify uvmcopy() in `kernel/vm.c` to map the parent's physical pages into the child, instead of allocating new pages, and clear PTE_W in the PTEs of both child and parent. 
 
-+ In `ThreadPool.h`, you will see some unusual treatment: the `ThreadPool` constructor (ThreadPool.cc:9) 
-passes an external function `executor()` and a pointer to itself (i.e., `this`) 
-to `thread_create_p()` and then `executor` calls the `thread_work()` method 
-of the ThreadPool object pointed by the pointer parameter passed into the `executor()` 
-in `thread_create_p`. The only reason for this treatment is to bypass 
-the constraint that ISO C++ forbids taking the address of an unqualified or 
-parenthesized non-static member function to form a pointer to member function. We provide the code 
-so that you can avoid this error and know how to fix it when you see similar errors in your code.   
++ Modify usertrap() in `kernel/trap.c` to recognize page faults. When a page-fault occurs on a COW page, allocate a new page with kalloc(), copy the old page to the new page, and install the new page in the PTE with PTE_W set. 
 
-+ For the task queue, you can use the `deque` template library, although you have 
-to add proper synchronizations to make your queue thread-safe. For this task, all you need 
-for deque is as follows:  
++ Next, ensure that each physical page is freed when the last PTE reference to it goes away (but not before!), perhaps by implementing reference counts in `kalloc.c`. 
 
-    + `#include <deque>` include library for deque implementation
-    + `std::deque <Task> queue;`  define a queue of Tasks
-    + `queue.push_back(task);`    add a task to the queue
-    +  `task = queue.front();`    fetch a task in the front      
-       `queue.pop_front();`       remove a task from the front
-    +  `queue.size()`             get number of tasks in the queue  
++ Finally, modify copyout() `kernel/vm.c` to use the same scheme as page faults when it encounters a COW page.
 
-# Task B: User-level threads on xv6 (40 Points)
-<code>Implement thread switching in user-level thread package. The program shall run on the xv6-riscv OS in the QEMU environment    
-in the School of Computing computer labs. </code>
++ It may be useful to have a way to record, for each PTE, whether it is a COW mapping. You can use the RSW (reserved for software) bits in the RISC-V PTE for this.
 
-## Overview
++ `usertests` explores more situations than cowtest, so don't forget to check that all tests pass for both.
 
-This task will familiarize you with how state is saved and restored in context switches. You will implement switching between 
-threads in a user-level threads package. This task involves more code reading and concept understanding. 
-Once you truly understand the concepts of how user-level threads work, the code will be trivial. 
-
-### Warmup: RISC-V assembly (0 points)
-
-For this task it will be important to understand a bit of RISC-V assembly. There is a file `user/call.c` in
- your xv6 repo. `make fs.img` builds a user program `call`
-  and a readable assembly version of the program in `user/call.asm`.
-
-Read the code in `call.asm` for the functions `g`, `f`, and `main`. 
-The instruction manual for RISC-V is available at https://content.riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf. 
-Here are some questions that you should answer (store the answers in a file `answers-syscall.txt` in the TaskB folder):
-
-1. Which registers contain arguments to functions? For 
-example, which register holds 13 in `main`'s call to `printf`?
-1.  Where is the function call to `f` from `main`? 
-Where is the call to `g`? (Hint: the compiler may inline functions.)
-1. At what address is the function `printf` located?
-1. What value is in the register `ra` just after the `jalr` to `printf` in main?
-
-### Uthread: switching between threads (40 points)
-In this task you will design the context switch mechanism for 
-a user-level threading system, and then implement it. 
-To get you started, your xv6 has two files user/uthread.c and user/uthread_switch.S, and 
-a rule in the Makefile to build a uthread program. uthread.c contains most of a user-level threading package, and code for three simple test threads. The threading package is missing some of the code to create a thread and to switch between threads.
-
-Your job is to come up with a plan to create threads and save/restore registers to 
-switch between threads, and implement that plan.
-
-Once you've finished, you should see the following output when you 
-run uthread on xv6 (the three threads might start in a different order):
-$ make qemu
-...
-$ uthread
-thread_a started
-thread_b started
-thread_c started
-thread_c 0
-thread_a 0
-thread_b 0
-thread_c 1
-thread_a 1
-thread_b 1
-...
-thread_c 99
-thread_a 99
-thread_b 99
-thread_c: exit after 100
-thread_a: exit after 100
-thread_b: exit after 100
-thread_schedule: no runnable threads
-$
-This output comes from the three test threads, each of 
-which has a loop that prints a line and then yields the CPU to the other threads.
-
-At this point, however, with no context switch code, you'll see no output.
-
-1. You should complete `thread_create` to create a 
-properly initialized thread so that when the scheduler switches to 
-that thread for the first time, `thread_switch` returns to the function 
-passed as argument `func`, running on the thread's stack. 
-You will have to decide where to save/restore registers. 
-Several solutions are possible. 
-You are allowed to modify struct thread. 
-1. You'll need to add a call to `thread_switch` in `thread_schedule`; 
-you can pass whatever arguments you need to `thread_switch`, 
-but the intent is to switch from thread `t` to the `next_thread`.
-1. You will need to complete `thread_switch` function in the `uthread_switch.S` file.
-
-Some hints:
-
-+ `thread_switch` needs to save/restore only the callee-save registers. Why?
-+ You can add fields to `struct thread` into which to save registers.
-+ You can see the assembly code for `uthread` in `user/uthread.asm`, which may be handy for debugging.
-+ To test your code it might be helpful to single step through your `thread_switch` using 
-`riscv64-linux-gnu-gdb`. 
-
-### `gdb` debug example
-You can get started in this way:
-
-```
-(gdb) file user/_uthread
-Reading symbols from user/_uthread...
-(gdb) b thread.c:60
-```
-This sets a breakpoint at a specified line in `thread.c`. 
-The breakpoint may (or may not) be triggered before you even run `uthread`. 
-How could that happen?
-
-Once your xv6 shell runs, type "`uthread`", and gdb will break 
-at line `thread_switch`. Now you can type commands like the following 
-to inspect the state of `uthread`:
-
-```
-  (gdb) p/x *next_thread
-```
-With "x", you can examine the content of a memory location:
-```
-  (gdb) x/x next_thread->stack
-```
-You can single step assembly instructions using:
-```
-   (gdb) si
-```  
-On-line documentation for gdb is [here](https://sourceware.org/gdb/current/onlinedocs/gdb/).
++ Some helpful macros and definitions for page table flags are at the end of the file kernel/riscv.h. 
 
 ## Submission
 Please following the procedure below in your submission.
