@@ -1,7 +1,7 @@
 BINARIES := jssim loadgen
 all: $(BINARIES)
 
-CFLAGS := $(CFLAGS) -g -Wall -Werror
+CFLAGS := $(CFLAGS) -std=c++11 -g -Wall -Werror
 
 clean:
 	rm -f *.o $(BINARIES)
