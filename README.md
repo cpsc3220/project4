@@ -1,4 +1,4 @@
-# CPSC/ECE 3200: Introduction to Operating System - Project #4
+# CPSC/ECE 3220: Introduction to Operating System - Project #4
 
 This project consists of two task A. Task A helps you to understand the typical scheduling algorithms and their implementation. Task B helps you to be familiar with page allocation and memory management. 
 
